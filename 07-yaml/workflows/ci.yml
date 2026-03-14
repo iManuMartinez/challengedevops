@@ -1,0 +1,125 @@
+name: CI
+
+on:
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        project: [dispatch, portal]
+        environment: [staging, prod]
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Lint YAML files
+        uses: ibiqlik/action-yamllint@v3
+        with:
+          file_or_dir: .
+          config_data: |
+            extends: default
+            rules:
+              line-length:
+                max: 160
+                level: warning
+
+      - name: Validate env example file exists
+        run: |
+          FILE="07-yaml/env/${{ matrix.project }}.${{ matrix.environment }}.env.example"
+          test -f "$FILE" || (echo "Missing $FILE" && exit 1)
+
+      - name: Validate env contract structure
+        run: |
+          FILE="07-yaml/env/${{ matrix.project }}.${{ matrix.environment }}.env.example"
+          PROJECT="${{ matrix.project }}"
+          ENVIRONMENT="${{ matrix.environment }}"
+
+          echo "Validating env contract in $FILE"
+
+          grep -q "^# Project: ${PROJECT}$" "$FILE" || {
+            echo "Missing or invalid project header in $FILE"
+            exit 1
+          }
+
+          grep -q "^# Environment: ${ENVIRONMENT}$" "$FILE" || {
+            echo "Missing or invalid environment header in $FILE"
+            exit 1
+          }
+
+          grep -q "^# required$" "$FILE" || {
+            echo "Missing required section marker in $FILE"
+            exit 1
+          }
+
+          grep -q "^# optional$" "$FILE" || {
+            echo "Missing optional section marker in $FILE"
+            exit 1
+          }
+
+          duplicate_keys=$(grep -E '^[A-Z0-9_]+=' "$FILE" | cut -d= -f1 | sort | uniq -d)
+          if [[ -n "$duplicate_keys" ]]; then
+            echo "Duplicate keys found in $FILE:"
+            echo "$duplicate_keys"
+            exit 1
+          fi
+
+          shared_required_keys=(
+            APP_NAME
+            APP_ENV
+            TWILIO_ACCOUNT_SID
+            TWILIO_AUTH_TOKEN
+            TWILIO_MESSAGING_SERVICE_SID
+          )
+
+          for key in "${shared_required_keys[@]}"; do
+            grep -q "^${key}=" "$FILE" || {
+              echo "Missing shared required key: $key in $FILE"
+              exit 1
+            }
+          done
+
+          case "$PROJECT" in
+            dispatch)
+              project_required_keys=(
+                DB_HOST
+                DB_PORT
+                DB_NAME
+                DB_USER
+                DB_PASSWORD
+                QUEUE_CONNECTION
+                REDIS_HOST
+                REDIS_PORT
+                TWILIO_FROM_NUMBER
+                SMS_RETRY_MAX_ATTEMPTS
+                SMS_RETRY_BACKOFF_SECONDS
+              )
+              ;;
+            portal)
+              project_required_keys=(
+                API_BASE_URL
+                SESSION_SECRET
+                JWT_SECRET
+              )
+              ;;
+            *)
+              echo "Unsupported project in matrix: $PROJECT"
+              exit 1
+              ;;
+          esac
+
+          for key in "${project_required_keys[@]}"; do
+            grep -q "^${key}=" "$FILE" || {
+              echo "Missing project-specific required key: $key in $FILE"
+              exit 1
+            }
+          done
+
+      - name: Run tests
+        run: |
+          echo "Running tests for ${{ matrix.project }} in ${{ matrix.environment }}"
+          echo "Replace this step with real unit/integration tests"

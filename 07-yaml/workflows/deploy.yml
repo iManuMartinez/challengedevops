@@ -1,0 +1,78 @@
+name: Deploy
+
+on:
+  push:
+    tags:
+      - 'dispatch-v*'
+      - 'portal-v*'
+  workflow_dispatch:
+    inputs:
+      project:
+        description: 'Project to deploy'
+        required: true
+        type: choice
+        options:
+          - dispatch
+          - portal
+      environment:
+        description: 'Target environment'
+        required: true
+        type: choice
+        options:
+          - staging
+          - prod
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: ${{ github.event.inputs.environment || 'prod' }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Resolve project and environment
+        id: resolve
+        run: |
+          if [[ "${GITHUB_EVENT_NAME}" == "workflow_dispatch" ]]; then
+            echo "project=${{ github.event.inputs.project }}" >> $GITHUB_OUTPUT
+            echo "environment=${{ github.event.inputs.environment }}" >> $GITHUB_OUTPUT
+          else
+            TAG_NAME="${GITHUB_REF_NAME}"
+
+            if [[ "$TAG_NAME" == dispatch-v* ]]; then
+              echo "project=dispatch" >> $GITHUB_OUTPUT
+            elif [[ "$TAG_NAME" == portal-v* ]]; then
+              echo "project=portal" >> $GITHUB_OUTPUT
+            else
+              echo "Unsupported tag format: $TAG_NAME"
+              exit 1
+            fi
+
+            echo "environment=prod" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Validate env template exists
+        run: |
+          FILE="07-yaml/env/${{ steps.resolve.outputs.project }}.${{ steps.resolve.outputs.environment }}.env.example"
+          test -f "$FILE" || (echo "Missing $FILE" && exit 1)
+
+      - name: Generate .env at runtime
+        run: |
+          cat <<EOF > .env
+          APP_NAME=${{ steps.resolve.outputs.project }}
+          APP_ENV=${{ steps.resolve.outputs.environment }}
+          TWILIO_ACCOUNT_SID=${{ secrets.TWILIO_ACCOUNT_SID }}
+          TWILIO_AUTH_TOKEN=${{ secrets.TWILIO_AUTH_TOKEN }}
+          TWILIO_MESSAGING_SERVICE_SID=${{ secrets.TWILIO_MESSAGING_SERVICE_SID }}
+          EOF
+
+      - name: Show safe deployment context
+        run: |
+          echo "Deploying project: ${{ steps.resolve.outputs.project }}"
+          echo "Deploying environment: ${{ steps.resolve.outputs.environment }}"
+          echo ".env generated at runtime"
+
+      - name: Placeholder deploy command
+        run: |
+          echo "Deploy command for ${{ steps.resolve.outputs.project }} to ${{ steps.resolve.outputs.environment }}"
