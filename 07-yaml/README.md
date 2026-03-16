@@ -63,6 +63,8 @@ It verifies:
 
 This allows CI to fail when the environment contract is broken, even though no real secrets are available in pull requests.
 
+The `Run tests` step is intentionally left as a placeholder. Since this exercise does not include runnable application code for each project, the CI workflow focuses on validating configuration contracts and reusable workflow structure rather than pretending to run project-specific test suites.
+
 ## Deploy Workflow Notes
 
 The deploy workflow is intentionally generic:
@@ -73,3 +75,5 @@ The deploy workflow is intentionally generic:
 - the final deploy command is left as a placeholder on purpose
 
 This keeps the exercise focused on secret handling and workflow structure rather than on any specific deployment technology.
+
+The generated `.env` is also intentionally minimal. It demonstrates the runtime secret-loading pattern and environment resolution logic, but it is not meant to represent a production-ready, exhaustive mapping of every required variable from each `.env.example` file.
